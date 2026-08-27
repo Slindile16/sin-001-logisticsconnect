@@ -5,10 +5,10 @@ import com.opencsv.CSVReader;
 import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 
-
-/*This method reads the package data from the CSV file and converts each row into package information that can be used by the rest of the LogisticsConnect system.
+//This method reads the package data from the CSV file and converts each row into package information that can be used by the rest of the LogisticsConnect system.
 
 public class CsvReader {
 
@@ -27,7 +27,7 @@ public class CsvReader {
 
             while ((row = reader.readNext()) != null) {
 
-                String hubId = row[0];
+                String hubId = row[0].trim().toUpperCase(Locale.ROOT);
                 String province = row[1];
                 String sortingCenter = row[2];
                 boolean active = Boolean.parseBoolean(row[3]);
