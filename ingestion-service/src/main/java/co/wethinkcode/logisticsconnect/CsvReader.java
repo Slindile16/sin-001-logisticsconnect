@@ -28,7 +28,7 @@ public class CsvReader {
             while ((row = reader.readNext()) != null) {
 
                 String hubId = row[0].trim().toUpperCase(Locale.ROOT);
-                String province = row[1];
+                String province = normalizeProvince(row[1]);
                 String sortingCenter = row[2];
                 boolean active = Boolean.parseBoolean(row[3]);
 
@@ -49,5 +49,28 @@ public class CsvReader {
         }
 
         return hubs;
+    }
+
+    private static String normalizeProvince(String value) {
+        String normalized = value.trim().replaceAll("\\s+", " ");
+        String[] words = normalized.toLowerCase(Locale.ROOT).split(" ");
+
+        for (int i = 0; i < words.length; i++) {
+            words[i] = titleCaseWord(words[i]);
+        }
+
+        return String.join(" ", words).replace("Kwazulu", "KwaZulu");
+    }
+
+    private static String titleCaseWord(String word) {
+        String[] parts = word.split("-");
+
+        for (int i = 0; i < parts.length; i++) {
+            if (!parts[i].isEmpty()) {
+                parts[i] = Character.toUpperCase(parts[i].charAt(0)) + parts[i].substring(1);
+            }
+        }
+
+        return String.join("-", parts);
     }
 }
