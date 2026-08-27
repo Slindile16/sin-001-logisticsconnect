@@ -94,6 +94,9 @@ Reads the raw CSV file.
 * Opens `hubs-global.csv`.
 * Reads every row.
 * Converts each row into a `Hub` object.
+* Checks that each row has the expected number of columns.
+* Converts supported active values (`Y`/`N`, `yes`/`no`, `1`/`0`, and
+  `true`/`false`) into the boolean required by `Hub`.
 * Returns a list of hub records.
 
 **Should NOT**
@@ -101,9 +104,11 @@ Reads the raw CSV file.
 * Trim values.
 * Correct spelling.
 * Remove duplicates.
-* Validate data.
+* Apply business-level data cleaning.
 
-It is responsible only for reading the file.
+It is responsible for reading the file and performing the minimum structural
+validation and type conversion needed to create `Hub` objects. The boolean
+conversion stays here because `Hub.active` is a boolean rather than raw text.
 
 ---
 
@@ -119,7 +124,6 @@ Converts raw hub data into consistent, reliable data.
 * Remove extra spaces inside text.
 * Normalize casing.
 * Standardize province names.
-* Normalize boolean values.
 * Handle missing or placeholder values.
 * Remove or merge duplicate records.
 
