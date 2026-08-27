@@ -1,65 +1,79 @@
 package co.wethinkcode.logisticsconnect;
 
-import com.opencsv.CSVReader;
-
-import java.io.FileReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-
-
-//This method reads the package data from the CSV file and converts each row into package information that can be used by the rest of the LogisticsConnect system.
+import java.util.Map;
+import java.util.Set;
 
 public class CsvReader {
 
+    private static final String HUBS_FILE = "hubs-global.csv";
+    private static final int EXPECTED_COLUMNS = 4;
+    private static final Set<String> TRUE_VALUES = Set.of("true", "yes", "y", "1");
+    private static final Set<String> FALSE_VALUES = Set.of("false", "no", "n", "0", "");
+    private static final Set<String> PLACEHOLDERS = Set.of("", "n/a", "tbd", "unknown", "-", "nan");
+
     public static List<Hub> readHubs() {
-        List<Hub> hubs = new ArrayList<>();
-
-        try {
-            CSVReader reader = new CSVReader(
-                    new FileReader("src/main/resources/hubs-global.csv")
-            );
-
-            String[] row;
-
-
-            reader.readNext();
-
-            while ((row = reader.readNext()) != null) {
-
-                String hubId = row[0].trim().toUpperCase(Locale.ROOT);
-                String province = normalizeProvince(row[1]);
-                String sortingCenter = row[2];
-                boolean active = Boolean.parseBoolean(row[3]);
-
-                Hub hub = new Hub(
-                        hubId,
-                        province,
-                        sortingCenter,
-                        active
-                );
-
-                hubs.add(hub);
-            }
-
-            reader.close();
-
-        } catch (Exception e) {
-            System.out.println("Could not read hubs CSV file.");
+        InputStream input = CsvReader.class.getClassLoader().getResourceAsStream(HUBS_FILE);
+        if (input == null) {
+            throw new IllegalStateException("Could not find " + HUBS_FILE + " on the classpath");
         }
 
-        return hubs;
+        List<Hub> hubs = new ArrayList<>();
+
+        try (com.opencsv.CSVReader reader = new com.opencsv.CSVReader(
+                new InputStreamReader(input, StandardCharsets.UTF_8))) {
+            reader.readNext();
+
+            String[] row;
+            int lineNumber = 1;
+            while ((row = reader.readNext()) != null) {
+                lineNumber++;
+                if (row.length != EXPECTED_COLUMNS) {
+                    throw new IllegalArgumentException("Invalid column count on CSV line " + lineNumber);
+                }
+
+                String hubId = cleanText(row[0]).toUpperCase(Locale.ROOT);
+                String province = normalizeProvince(row[1]);
+                String sortingCenter = normalizeName(row[2]);
+
+                if (hubId.isEmpty() || sortingCenter.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Hub ID and sorting center are required on CSV line " + lineNumber);
+                }
+
+                hubs.add(new Hub(hubId, province, sortingCenter, normalizeActive(row[3])));
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not read " + HUBS_FILE, e);
+        }
+
+        fillMissingProvinces(hubs);
+        return removeDuplicates(hubs);
     }
 
     private static String normalizeProvince(String value) {
-        String normalized = value.trim().replaceAll("\\s+", " ");
-        String[] words = normalized.toLowerCase(Locale.ROOT).split(" ");
+        String province = normalizeName(value);
+        return switch (province) {
+            case "Kwa-Zulu Natal", "Kwazulu Natal", "Kwazulu-Natal" -> "KwaZulu-Natal";
+            default -> province;
+        };
+    }
+
+    private static String normalizeName(String value) {
+        String cleaned = cleanText(value).toLowerCase(Locale.ROOT);
+        String[] words = cleaned.split(" ");
 
         for (int i = 0; i < words.length; i++) {
             words[i] = titleCaseWord(words[i]);
         }
 
-        return String.join(" ", words).replace("Kwazulu", "KwaZulu");
+        return String.join(" ", words);
     }
 
     private static String titleCaseWord(String word) {
@@ -72,5 +86,57 @@ public class CsvReader {
         }
 
         return String.join("-", parts);
+    }
+
+    private static boolean normalizeActive(String value) {
+        String normalized = cleanText(value).toLowerCase(Locale.ROOT);
+        if (TRUE_VALUES.contains(normalized)) {
+            return true;
+        }
+        if (FALSE_VALUES.contains(normalized)) {
+            return false;
+        }
+        throw new IllegalArgumentException("Unsupported active value: " + value);
+    }
+
+    private static String cleanText(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        String cleaned = value.trim().replaceAll("\\s+", " ");
+        return PLACEHOLDERS.contains(cleaned.toLowerCase(Locale.ROOT)) ? "" : cleaned;
+    }
+
+    private static void fillMissingProvinces(List<Hub> hubs) {
+        Map<String, String> provinceByCenter = new LinkedHashMap<>();
+        for (Hub hub : hubs) {
+            if (!hub.getProvince().isEmpty()) {
+                provinceByCenter.putIfAbsent(hub.getSortingCenter(), hub.getProvince());
+            }
+        }
+
+        for (Hub hub : hubs) {
+            if (hub.getProvince().isEmpty()) {
+                hub.setProvince(provinceByCenter.getOrDefault(hub.getSortingCenter(), "Unknown"));
+            }
+        }
+    }
+
+    private static List<Hub> removeDuplicates(List<Hub> hubs) {
+        Map<String, Hub> uniqueHubs = new LinkedHashMap<>();
+
+        for (Hub hub : hubs) {
+            String key = hub.getProvince() + "|" + hub.getSortingCenter();
+            Hub existing = uniqueHubs.get(key);
+
+            if (existing == null) {
+                uniqueHubs.put(key, hub);
+            } else if (hub.isActive()) {
+                existing.setActive(true);
+            }
+        }
+
+        return List.copyOf(uniqueHubs.values());
     }
 }
