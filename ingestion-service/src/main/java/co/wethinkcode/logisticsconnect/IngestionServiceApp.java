@@ -7,7 +7,8 @@ import java.util.List;
 public class IngestionServiceApp {
 
     public static void main(String[] args) {
-        List<Hub> hubs = CsvReader.readHubs();
+        DataReader reader = new CsvReader();
+        List<Hub> hubs = new DataCleaner().clean(reader.readHubs());
 
         Javalin app = Javalin.create();
 
