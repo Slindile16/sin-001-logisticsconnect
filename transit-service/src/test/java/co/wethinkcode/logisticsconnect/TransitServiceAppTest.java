@@ -3,7 +3,12 @@ package co.wethinkcode.logisticsconnect;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
+import co.wethinkcode.logisticsconnect.mq.StageCache;
+import co.wethinkcode.logisticsconnect.mq.ActiveMqStageSubscriber;
+import co.wethinkcode.logisticsconnect.mq.MqConfig;
 import io.javalin.Javalin;
+import org.apache.activemq.ActiveMQConnectionFactory;
+import org.apache.activemq.broker.BrokerService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +20,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import javax.jms.Connection;
+import javax.jms.Session;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -22,30 +29,37 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TransitServiceAppTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private HttpServer hubServer;
-    private HttpServer delayServer;
     private Javalin app;
     private URI transitUri;
     private int hubStatus = 200;
+    private StageCache stageCache;
+    private BrokerService broker;
+    private ActiveMqStageSubscriber subscriber;
 
     @BeforeEach
     void startServices() throws IOException {
         hubServer = startStubServer("/hubs/H-500", () -> hubStatus,
                 "{\"hubId\":\"H-500\",\"province\":\"Gauteng\","
                         + "\"sortingCenter\":\"Johannesburg Central\",\"active\":true}");
-        delayServer = startStubServer("/delay-stage/H-500", () -> 200, "{\"hubId\":\"H-500\",\"stage\":3}");
-        app = TransitServiceApp.createApp(baseUri(hubServer), baseUri(delayServer)).start(0);
+        stageCache = new StageCache();
+        stageCache.update("H-500", 3);
+        app = TransitServiceApp.createApp(baseUri(hubServer), stageCache).start(0);
         transitUri = URI.create("http://localhost:" + app.port());
     }
 
     @AfterEach
-    void stopServices() {
+    void stopServices() throws Exception {
         if (app != null) app.stop();
+        if (subscriber != null) subscriber.close();
         if (hubServer != null) hubServer.stop(0);
-        if (delayServer != null) delayServer.stop(0);
+        if (broker != null) {
+            broker.stop();
+            broker.waitUntilStopped();
+        }
     }
 
     @Test
-    void etaCallsBothServicesAndIncludesDelayAdjustedArrival() throws Exception {
+    void etaUsesHubDetailsAndSubscribedDelayStage() throws Exception {
         HttpResponse<String> response = get("/eta/H-500");
         JsonNode body = mapper.readTree(response.body());
 
@@ -66,6 +80,54 @@ class TransitServiceAppTest {
 
         assertEquals(404, response.statusCode());
         assertTrue(response.body().contains("Hub not found"));
+    }
+
+    @Test
+    void etaUsesZeroWhenNoStageUpdateHasArrived() throws Exception {
+        stageCache = new StageCache();
+        app.stop();
+        app = TransitServiceApp.createApp(baseUri(hubServer), stageCache).start(0);
+        transitUri = URI.create("http://localhost:" + app.port());
+
+        JsonNode body = mapper.readTree(get("/eta/H-500").body());
+
+        assertEquals(0, body.get("delayStage").asInt());
+        assertEquals(60, body.get("estimatedArrivalMinutes").asInt());
+    }
+
+    @Test
+    void etaUsesStageReceivedFromActiveMqTopic() throws Exception {
+        String brokerName = "transit-test-" + System.nanoTime();
+        broker = new BrokerService();
+        broker.setBrokerName(brokerName);
+        broker.setPersistent(false);
+        broker.setUseJmx(false);
+        broker.start();
+        broker.waitUntilStarted();
+
+        stageCache = new StageCache();
+        subscriber = new ActiveMqStageSubscriber(stageCache, "vm://" + brokerName + "?create=false");
+        app.stop();
+        app = TransitServiceApp.createApp(baseUri(hubServer), stageCache).start(0);
+        transitUri = URI.create("http://localhost:" + app.port());
+
+        ActiveMQConnectionFactory factory = new ActiveMQConnectionFactory("vm://" + brokerName + "?create=false");
+        try (Connection connection = factory.createConnection();
+             Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
+            var producer = session.createProducer(session.createTopic(MqConfig.TOPIC));
+            producer.send(session.createTextMessage(
+                    "{\"hubId\":\"H-500\",\"stage\":5,\"timestamp\":\"2026-10-02T10:15:00Z\"}"));
+            producer.close();
+        }
+
+        long deadline = System.nanoTime() + java.time.Duration.ofSeconds(3).toNanos();
+        while (stageCache.getStage("H-500") != 5 && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+        }
+        JsonNode body = mapper.readTree(get("/eta/H-500").body());
+
+        assertEquals(5, body.get("delayStage").asInt());
+        assertEquals(210, body.get("estimatedArrivalMinutes").asInt());
     }
 
     private HttpServer startStubServer(String path, StatusProvider statusProvider, String body) throws IOException {
