@@ -1,7 +1,11 @@
 package co.wethinkcode.logisticsconnect;
 
 import io.javalin.Javalin;
+import co.wethinkcode.logisticsconnect.mq.ActiveMqStagePublisher;
+import co.wethinkcode.logisticsconnect.mq.StageChangedEvent;
+import co.wethinkcode.logisticsconnect.mq.StagePublisher;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -12,10 +16,19 @@ public class DelayStageServiceApp {
     private static final int MAX_STAGE = 8;
 
     public static void main(String[] args) {
-        createApp(new ConcurrentHashMap<>()).start(PORT);
+        ActiveMqStagePublisher publisher = new ActiveMqStagePublisher();
+        Javalin app = createApp(new ConcurrentHashMap<>(), publisher).start(PORT);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            app.stop();
+            publisher.close();
+        }));
     }
 
     static Javalin createApp(ConcurrentMap<String, Integer> stages) {
+        return createApp(stages, event -> { });
+    }
+
+    static Javalin createApp(ConcurrentMap<String, Integer> stages, StagePublisher publisher) {
         Javalin app = Javalin.create();
         app.get("/health", ctx -> ctx.result("OK"));
         app.get("/delay-stage/{hubId}", ctx -> {
@@ -41,7 +54,19 @@ public class DelayStageServiceApp {
                 return;
             }
 
-            stages.put(hubId, update.getStage());
+            int newStage = update.getStage();
+            synchronized (stages) {
+                int currentStage = stages.getOrDefault(hubId, MIN_STAGE);
+                if (currentStage != newStage) {
+                    try {
+                        publisher.publish(new StageChangedEvent(hubId, newStage, Instant.now().toString()));
+                    } catch (RuntimeException e) {
+                        ctx.status(503).json(Map.of("error", "Could not publish stage update"));
+                        return;
+                    }
+                    stages.put(hubId, newStage);
+                }
+            }
             ctx.json(Map.of("hubId", hubId, "stage", update.getStage()));
         });
         return app;

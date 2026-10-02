@@ -2,6 +2,7 @@ package co.wethinkcode.logisticsconnect;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import co.wethinkcode.logisticsconnect.mq.StageChangedEvent;
 import io.javalin.Javalin;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +13,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,10 +23,11 @@ class DelayStageServiceAppTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private Javalin app;
     private URI baseUri;
+    private final List<StageChangedEvent> published = new ArrayList<>();
 
     @BeforeEach
     void startApp() {
-        app = DelayStageServiceApp.createApp(new ConcurrentHashMap<>()).start(0);
+        app = DelayStageServiceApp.createApp(new ConcurrentHashMap<>(), published::add).start(0);
         baseUri = URI.create("http://localhost:" + app.port());
     }
 
@@ -71,6 +75,18 @@ class DelayStageServiceAppTest {
                 .build();
 
         assertEquals(400, HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString()).statusCode());
+    }
+
+    @Test
+    void publishesOnlyWhenAHubStageChanges() throws Exception {
+        postStage(3);
+        postStage(3);
+
+        assertEquals(1, published.size());
+        assertEquals("H-500", published.get(0).getHubId());
+        assertEquals(3, published.get(0).getStage());
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(
+                () -> java.time.Instant.parse(published.get(0).getTimestamp()));
     }
 
     private HttpResponse<String> get(String path) throws Exception {
