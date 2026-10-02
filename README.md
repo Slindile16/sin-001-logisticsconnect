@@ -28,8 +28,8 @@ cleanup through synchronous REST calls to asynchronous MQ decoupling and alertin
 Plus [`common/`](common) (no port) — the shared ActiveMQ broker and MQ config notes
 for `package-status-topic`: Package status updates move from latency-driven RPC to bandwidth-driven messaging.
 
-**Status:** scaffold only — build files, Javalin bootstrap, and TODOs are in place; no
-business logic has been implemented yet.
+**Status:** Stages 1 and 2 are implemented. Stage 3 (ActiveMQ decoupling) and the
+Stage 4 AlertBot stretch goal remain.
 
 ## Your task
 
