@@ -43,8 +43,10 @@ Listens on port `7052`.
 - `GET /delay-stage/{hubId}` returns the current stage, defaulting to `0` for a hub with no recorded stage.
 - `POST /delay-stage/{hubId}` updates the stage. Send JSON such as `{"stage":3}`; valid stages are integers from `0` to `8`.
 
-Stage values are held in memory and reset when the service restarts. Stage 3
-will publish updates to the ActiveMQ topic.
+Stage values are held in memory and reset when the service restarts. When a
+stage changes, the service publishes `{ "hubId": "H-500", "stage": 3,
+"timestamp": "..." }` to `package-status-topic`. Start the broker first using
+`../common/docker-compose.yml`.
 
 ## Verify manually
 

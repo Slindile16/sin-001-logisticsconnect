@@ -40,13 +40,14 @@ Listens on port `7053`.
 ## Endpoint
 
 - `GET /health` confirms the service is running.
-- `GET /eta/{hubId}` fetches hub details from Hub Service and the current delay stage from Delay Stage Service, then returns an ETA response.
+- `GET /eta/{hubId}` fetches hub details from Hub Service and combines them with the latest delay stage received from `package-status-topic`.
 
 The illustrative estimate is 60 minutes plus 30 minutes per delay stage. The
 response includes the hub, stage, estimated minutes, and an estimated arrival
-timestamp. Configure the upstream addresses with `HUB_SERVICE_URL` and
-`DELAY_STAGE_SERVICE_URL` (defaults: `http://localhost:7051` and
-`http://localhost:7052`).
+timestamp. The service starts a topic subscriber at startup and uses stage `0`
+until it receives an update for a hub. Configure the Hub Service address with
+`HUB_SERVICE_URL` (default: `http://localhost:7051`). Start the ActiveMQ broker
+before Transit Service using `../common/docker-compose.yml`.
 
 ## Verify manually
 

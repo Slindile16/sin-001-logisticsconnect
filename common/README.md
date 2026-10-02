@@ -26,9 +26,9 @@ common/
 └── README.md
 ```
 
-This folder holds the broker config and notes only — the actual publish/subscribe
-code belongs in the producer/consumer services listed above (their poms already
-depend on `activemq-client`, and each already has
+This folder holds the broker config and notes only — the publish/subscribe code
+lives in the producer and consumer services (their poms include
+`activemq-client`, and each has
 `src/main/java/co/wethinkcode/logisticsconnect/mq/MqConfig.java`).
 
 ## Build
@@ -54,15 +54,20 @@ from their own directories at the project root).
 docker compose ps          # confirm the broker container is healthy
 ```
 
-Once the TODOs below are implemented, verify end-to-end by publishing a message from
-`delay-stage-service` and confirming the consumer(s) receive it — e.g. via logs, or by
-watching the topic in the web console.
+With the broker and both services running, update a stage and confirm the
+Transit Service logs show it received the event. Then request an ETA and check
+that it uses the updated stage:
+
+```
+curl -X POST http://localhost:7052/delay-stage/H-500 -H "Content-Type: application/json" -d '{"stage":3}'
+curl http://localhost:7053/eta/H-500
+```
+
+Stage messages are JSON objects containing `hubId`, `stage`, and an ISO-8601
+`timestamp`.
 
 ## TODO
 
-- Add `activemq-client` publish logic to `delay-stage-service` on its stage/state-change endpoint.
-- Add `activemq-client` subscriber logic to consumer service(s) above, replacing any
-  direct synchronous calls to `delay-stage-service`.
 - `alertbot` (stretch goal) needs its own subscriber logic too — its `pom.xml`
   already has the `activemq-client` dependency alongside the other participating
   services.
