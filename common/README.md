@@ -51,23 +51,18 @@ from their own directories at the project root).
 ## Test
 
 ```
-docker compose ps          # confirm the broker container is healthy
+docker compose ps          # confirm the broker container is running
 ```
 
-With the broker and both services running, update a stage and confirm the
-Transit Service logs show it received the event. Then request an ETA and check
-that it uses the updated stage:
+With the broker and services running, update a stage and confirm the Transit
+Service logs show it received the event. Then request an ETA and check that it
+uses the updated stage. AlertBot should also log a simulated alert when a hub
+crosses into stage 5 or higher:
 
 ```
-curl -X POST http://localhost:7052/delay-stage/H-500 -H "Content-Type: application/json" -d '{"stage":3}'
+curl -X POST http://localhost:7052/delay-stage/H-500 -H "Content-Type: application/json" -d '{"stage":5}'
 curl http://localhost:7053/eta/H-500
 ```
 
 Stage messages are JSON objects containing `hubId`, `stage`, and an ISO-8601
 `timestamp`.
-
-## TODO
-
-- `alertbot` (stretch goal) needs its own subscriber logic too — its `pom.xml`
-  already has the `activemq-client` dependency alongside the other participating
-  services.

@@ -89,14 +89,13 @@ Listens on port `7050` and exposes two endpoints:
 - `GET /health` confirms that the service is running.
 - `GET /hubs` returns the cleaned and deduplicated hub records as JSON.
 
-## Test
+## Tests and manual checks
 
-No automated tests yet. Manually verify it's up:
+Automated tests cover data cleaning, CSV parsing, and the service endpoints.
+Run them from this module directory with `mvn test`. You can also check the
+running service manually:
 
 ```
 curl http://localhost:7050/health   # -> OK
 curl http://localhost:7050/hubs     # -> cleaned hub records as JSON
 ```
-
-To add real tests, add JUnit 5 + the Surefire plugin to `pom.xml`, put tests under
-`src/test/java/co/wethinkcode/logisticsconnect/`, and run `mvn test`.

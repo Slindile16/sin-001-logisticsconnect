@@ -23,7 +23,7 @@ cleanup through synchronous REST calls to asynchronous MQ decoupling and alertin
 | HubServiceApp | [`hub-service/`](hub-service) | 7051 | Serves provinces and sorting centers (place-name source of truth). |
 | DelayStageServiceApp | [`delay-stage-service/`](delay-stage-service) | 7052 | Tracks the Transit Delay Stage (0-8, e.g. weather shutdowns). |
 | TransitServiceApp | [`transit-service/`](transit-service) | 7053 | Calculates estimated arrival windows based on hub and delay stage. |
-| AlertBotApp | [`alertbot/`](alertbot) | 7054 | posts proactive delay notifications to public transit social media pages (simulated). |
+| AlertBotApp | [`alertbot/`](alertbot) | 7054 | Simulates an alert when a hub enters a high-delay stage. |
 
 Plus [`common/`](common) (no port) — the shared ActiveMQ broker and MQ config notes
 for `package-status-topic`: Package status updates move from latency-driven RPC to bandwidth-driven messaging.
@@ -122,6 +122,9 @@ find . -name pom.xml -execdir mvn -q package \;
 # ingestion
 cd ingestion-service && mvn package && java -jar target/ingestion-service.jar
 
+# Start the broker before the MQ-connected services
+cd common && docker compose up -d
+
 # domain services, each in its own terminal
 # terminal 1
 cd hub-service && mvn package && java -jar target/hub-service.jar
@@ -129,9 +132,6 @@ cd hub-service && mvn package && java -jar target/hub-service.jar
 cd delay-stage-service && mvn package && java -jar target/delay-stage-service.jar
 # terminal 3
 cd transit-service && mvn package && java -jar target/transit-service.jar
-
-# MQ broker (needed once the MQ-aware services above are wired up)
-cd common && docker compose up -d
 
 # alerting
 cd alertbot && mvn package && java -jar target/alertbot.jar
@@ -145,36 +145,12 @@ cd alertbot && mvn package && java -jar target/alertbot.jar
 | TransitServiceApp (`transit-service`) | 7053 |
 | AlertBotApp (`alertbot`) | 7054 |
 
-## Test
+## Tests and health checks
 
-No automated tests exist yet (this is a scaffold). Each running service exposes
-`/health`, so sanity-check manually:
+Automated tests are present in the ingestion, hub, delay-stage, transit, and
+AlertBot modules. Run them from each module directory with `mvn test`. Each
+running service also exposes `/health` for a manual smoke check:
 
 ```
 curl http://localhost:7050/health   # -> OK
-```
-
-To add real tests to a module, add JUnit 5 and Surefire to its `pom.xml`:
-
-```xml
-<dependency>
-  <groupId>org.junit.jupiter</groupId>
-  <artifactId>junit-jupiter</artifactId>
-  <version>5.10.2</version>
-  <scope>test</scope>
-</dependency>
-```
-
-```xml
-<plugin>
-  <groupId>org.apache.maven.plugins</groupId>
-  <artifactId>maven-surefire-plugin</artifactId>
-  <version>3.2.5</version>
-</plugin>
-```
-
-then add tests under that module's `src/test/java/...` and run:
-
-```
-mvn test
 ```

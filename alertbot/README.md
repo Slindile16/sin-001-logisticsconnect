@@ -26,10 +26,15 @@ alertbot/
 └── src/main/java/co/wethinkcode/logisticsconnect/
     ├── AlertBotApp.java
     └── mq/
+        ├── AlertThresholdTracker.java
         ├── ActiveMqAlertSubscriber.java
         ├── MqConfig.java
         └── StageChangedEvent.java
 ```
+
+The threshold tracker has unit tests for crossing and resetting the threshold,
+hub ID normalization, and invalid updates. Run them from this module directory
+with `mvn test`.
 
 ## Build
 
