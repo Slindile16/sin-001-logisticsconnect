@@ -2,18 +2,21 @@
 
 ## Overview
 
-Posts proactive delay notifications to public transit social media pages (simulated).
+Subscribes to delay-stage updates and simulates posting a public transit alert when
+a hub enters a high-delay stage.
 
 Part of the [LogisticsConnect](../README.md) project — its alerting service.
 Independent Maven module, no parent pom.
 
-Mechanism: Outbound webhook, simulated social post
+The alert threshold is stage 5. AlertBot remembers each hub's latest stage and
+logs a simulated public notification when its stage moves from below 5 to 5 or
+higher. Moving back below 5 resets that hub so a later threshold crossing can
+raise another alert. No external social media service is contacted.
 
-MQ (stretch goal): this service subscribes to the ActiveMQ topic
+This service subscribes to the ActiveMQ topic
 `package-status-topic` — see [`../common/`](../common). Broker URL and topic name
 come from the common `co.wethinkcode.logisticsconnect.mq.MqConfig` class alongside
-it in this module. Use the stage in each message to decide when to raise an alert
-(e.g. above a threshold you choose).
+it in this module.
 
 ## Project structure
 
@@ -23,7 +26,9 @@ alertbot/
 └── src/main/java/co/wethinkcode/logisticsconnect/
     ├── AlertBotApp.java
     └── mq/
-        └── MqConfig.java
+        ├── ActiveMqAlertSubscriber.java
+        ├── MqConfig.java
+        └── StageChangedEvent.java
 ```
 
 ## Build
@@ -40,13 +45,21 @@ java -jar target/alertbot.jar
 
 Listens on port `7054`.
 
-## Test
+Start the ActiveMQ broker first using `docker compose up -d` in `common/`, then
+start the other services and AlertBot in separate terminals. To verify the alert,
+raise a hub's delay stage to 5 or higher through Delay Service:
 
-No automated tests yet. Manually verify it's up:
-
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:7052/delay-stage/H-500 `
+  -ContentType "application/json" -Body '{"stage":5}'
 ```
-curl http://localhost:7054/health   # -> OK
-```
 
-To add real tests, add JUnit 5 + the Surefire plugin to `pom.xml`, put tests under
-`src/test/java/co/wethinkcode/logisticsconnect/`, and run `mvn test`.
+AlertBot's terminal should log a simulated alert for H-500. Lower the stage below
+5 and raise it again to see another alert. Check `http://localhost:7054/health` for
+the health endpoint.
+
+## Verification
+
+The health endpoint should return `OK` at `http://localhost:7054/health`. Verify
+the threshold behavior by watching the AlertBot terminal while changing a hub's
+stage through Delay Service as described above.
