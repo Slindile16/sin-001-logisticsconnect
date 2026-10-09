@@ -11,8 +11,6 @@ import javax.jms.Message;
 import javax.jms.MessageConsumer;
 import javax.jms.Session;
 import javax.jms.TextMessage;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /** Listens for delay changes and simulates a public alert when a hub enters a high-delay stage. */
 public class ActiveMqAlertSubscriber implements AutoCloseable {
@@ -24,7 +22,7 @@ public class ActiveMqAlertSubscriber implements AutoCloseable {
     private final Connection connection;
     private final Session session;
     private final MessageConsumer consumer;
-    private final ConcurrentMap<String, Integer> currentStages = new ConcurrentHashMap<>();
+    private final AlertThresholdTracker thresholdTracker = new AlertThresholdTracker();
 
     public ActiveMqAlertSubscriber() {
         this(MqConfig.BROKER_URL);
@@ -51,24 +49,14 @@ public class ActiveMqAlertSubscriber implements AutoCloseable {
 
         try {
             StageChangedEvent event = JSON.readValue(textMessage.getText(), StageChangedEvent.class);
-            if (event.getHubId() == null || event.getHubId().isBlank()
-                    || event.getStage() < 0 || event.getStage() > 8) {
-                LOGGER.warn("Ignoring invalid stage update on {}", MqConfig.TOPIC);
-                return;
+            if (thresholdTracker.update(event.getHubId(), event.getStage())) {
+                LOGGER.warn("SIMULATED ALERT: Hub {} entered delay stage {} (threshold {}). "
+                                + "A public transit notification would be posted.",
+                        event.getHubId(), event.getStage(), ALERT_THRESHOLD);
+            } else {
+                LOGGER.info("Received delay stage update for hub {}: stage {}",
+                        event.getHubId(), event.getStage());
             }
-
-            currentStages.compute(event.getHubId(), (hubId, previousStage) -> {
-                int previous = previousStage == null ? 0 : previousStage;
-                int current = event.getStage();
-                if (previous < ALERT_THRESHOLD && current >= ALERT_THRESHOLD) {
-                    LOGGER.warn("SIMULATED ALERT: Hub {} entered delay stage {} (threshold {}). "
-                                    + "A public transit notification would be posted.",
-                            hubId, current, ALERT_THRESHOLD);
-                } else {
-                    LOGGER.info("Received delay stage update for hub {}: stage {}", hubId, current);
-                }
-                return current;
-            });
         } catch (Exception e) {
             LOGGER.warn("Ignoring invalid stage update on {}", MqConfig.TOPIC, e);
         }
