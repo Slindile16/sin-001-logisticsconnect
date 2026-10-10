@@ -65,6 +65,6 @@ the health endpoint.
 
 ## Verification
 
-The health endpoint should return `OK` at `http://localhost:7054/health`. Verify
-the threshold behavior by watching the AlertBot terminal while changing a hub's
-stage through Delay Service as described above.
+The health endpoint returns `OK` at `http://localhost:7054/health`. The threshold
+behavior was verified live by changing a hub's stage through Delay Service and
+confirming the simulated alert in the AlertBot terminal.

@@ -28,9 +28,8 @@ cleanup through synchronous REST calls to asynchronous MQ decoupling and alertin
 Plus [`common/`](common) (no port) — the shared ActiveMQ broker and MQ config notes
 for `package-status-topic`: Package status updates move from latency-driven RPC to bandwidth-driven messaging.
 
-**Status:** Stages 1-3 are implemented, and the Compose-based Stage 3 flow has been
-verified live. Stage 4 (AlertBot) is implemented; its live alert behavior still
-needs runtime verification.
+**Status:** Stages 1-4 are implemented. The Compose-based Stage 3 flow and the
+Stage 4 AlertBot threshold alert have both been verified live.
 
 ## Your task
 
